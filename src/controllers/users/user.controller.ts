@@ -6,9 +6,23 @@ import { hashPassword } from "../../helpers/bcrypt"
 import { HydratedDocument } from "mongoose"
 import { sendMail } from "../../helpers/sendMail"
 import bcrypt from 'bcryptjs';
-import generateToken from "../../helpers/generateToken"
+// import generateToken from "../../helpers/generateToken"
 import Jwt from "jsonwebtoken";
 import { getUser } from "../../service/getUser"
+import { generateRefreshToken, generateToken, verifyToken } from "../../util/auth.util"
+import { ObjectId } from "mongodb";
+
+
+interface tokenType{
+
+    userId: string;
+    email: string;
+    username: string;
+    iat: number;
+    exp: number;
+}
+
+
 
 // @DESC:signup an admin
 //@METHOD:Post
@@ -79,20 +93,18 @@ export const loginAdmin = (AsyncHandler(async (req: Request<{}, {}, authenticate
 
             if (compared) {
                 const { userId, email, firstname, roles, username, lastname, createdAt, verified, _id } = userExist
-                const token = await generateToken(res, userExist._id as string)
+                // const token = await generateToken(res, userExist._id as string)
                 // console.log(await generateToken(res, userExist._id as string));
-                
+                const token = generateToken(userExist)
                 res.status(201).send({
-                    token : Jwt.sign({ userId }, String(process.env.JWT_PRIVATE_KEY), {
-                        expiresIn: '1d',
-                    }),
+                    token,
                     user: {
                         _id, userId, email, firstname, username, lastname, roles, verified, createdAt,
                     },
                     msg: "Authentication successful"
                 })
             }else{
-                res.status(404)
+                res.status(401)
                 throw new Error("invalid credentials");
             }
         } else {
@@ -105,6 +117,37 @@ export const loginAdmin = (AsyncHandler(async (req: Request<{}, {}, authenticate
     }
 
 }))
+
+
+// @DESC:refresh token
+//@METHOD:POST
+//@ROUTES:localhost:3001/api/users/refresh-token
+
+export const refreshToken = AsyncHandler(async (req: Request, res: Response) => {
+  try {
+      const {oldToken}= req.body
+      const decodedToken = verifyToken(oldToken)
+       if (!decodedToken) {
+           throw new Error("Invalid or expired token");
+        }
+
+      const existingUser = await userModel.findOne({userId:decodedToken?.userId})
+      console.log(existingUser);
+      
+    if (!existingUser) {
+        throw new Error("user not found")
+    }
+    const newToken = generateRefreshToken(existingUser);
+        res.status(201).json({
+            res: "ok",
+            token: newToken 
+        })
+  } catch (error) {
+     res.status(401)
+        throw new Error("invalid Token");
+  }
+
+})
 
 // @DESC:get current user
 //@METHOD:GET
@@ -160,7 +203,7 @@ export const logoutUser = AsyncHandler(async (req: Request, res: Response) => {
 export const listUsers = AsyncHandler(async (req: Request, res: Response) => {
 
     try {
-        const users = await userModel.find().select("-__v -password")
+        const users = await userModel.find().select("-__v -password -token")
         res.status(201).json({
             res: "ok",
             total: users?.length,
@@ -193,6 +236,51 @@ export const deleteAdmin = AsyncHandler(async (req: Request, res: Response) => {
             user,
             msg: "admin deleted successfully"
         })
+    } catch (error: any) {
+        res.status(401)
+        throw new Error(error.message);
+    }
+})
+
+// @DESC:update admin
+//@METHOD:Delete
+//@ROUTES:localhost:3001/api/delete:userId
+//@ROLES:admin
+
+export const updateAdmin = AsyncHandler(async (req: Request<{userId:string},{}, Partial<createuserTypes>>, res: Response) => {
+    let { userId } = req.params
+     const { firstname, lastname, phone} = req.body
+    if (!userId) {
+        throw new Error("userid is required")
+    }
+    try {
+        const user = await userModel.findOne<UserProps>({userId})
+        if (!user) {
+            res.status(400)
+            throw new Error("user not found");
+        }
+        const updateAdmin = await userModel.findOneAndUpdate({ userId }, {
+            $set: {
+                firstname:firstname || user?.firstname,
+                lastname:lastname || user?.lastname,
+                phone:phone || user?.phone,
+            }
+        }, {
+            new:true
+        }).select("-__v -token -_id")
+      
+        console.log(user);
+        
+          if (!updateAdmin) {
+            res.status(401)
+            throw new Error("unable to update admin");
+        } else {
+            res.status(201).json({
+                res: "ok",
+                msg: "user updated successfully",
+                user:updateAdmin
+            })
+        }
     } catch (error: any) {
         res.status(401)
         throw new Error(error.message);

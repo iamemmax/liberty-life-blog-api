@@ -1,8 +1,9 @@
 const asyncHandler = require("express-async-handler");
 const jwt = require("jsonwebtoken");
 import { NextFunction, Request, Response } from "express";
-import { JwtPayload, JsonWebTokenError } from "jsonwebtoken";
 import userModel, { UserProps } from "../models/user.model";
+import Jwt  from "jsonwebtoken";
+import secretKey from "../config/jwtConfig";
 
 
 export const isAuthenticated = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
@@ -63,4 +64,33 @@ export const isAdmin = (roles: any) => asyncHandler(async (req: Request, res: Re
 
     }
 
+})
+
+
+export const AuthenticateToken = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+    const authHeader = req.header("Authorization")
+    if (!authHeader) {
+        return res.status(401).json({
+                    res: "failed",
+                    message: "Unauthorized:Missing Token.",
+                })
+    }
+    const [bearer, token] = authHeader?.split(" ")
+    if (bearer !== "Bearer" || !token) {
+        return res.status(401).json({
+                    res: "failed",
+                    message: "Unauthorized:Invalid token format",
+                })
+    }
+    Jwt.verify(token, secretKey, (err, user) => {
+        if (err) {
+             return res.status(403).json({
+                    res: "failed",
+                    message: "Forbidden:Invalid token ",
+                })
+        }
+        // @ts-ignore
+        req.user = user
+        next()
+    })
 })

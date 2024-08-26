@@ -1,15 +1,17 @@
 import express from "express"
-import { createUser, deleteAdmin, getCurrentUser, listUsers, loginAdmin, logoutUser } from "../../controllers/users/user.controller"
+import { createUser, deleteAdmin, getCurrentUser, listUsers, loginAdmin, logoutUser, refreshToken, updateAdmin } from "../../controllers/users/user.controller"
 import { validateSchema } from "../../validations/schema/validateSchema"
 import { createUserValidation, validateLoginSchema } from "../../validations/schema/user.joi"
-import { isAdmin, isAuthenticated } from "../../middlewares/ensureLogin"
+import { AuthenticateToken, isAdmin, isAuthenticated } from "../../middlewares/ensureLogin"
 const UserRouter = express.Router()
-UserRouter.get("/", isAuthenticated, isAdmin(["admin"]), listUsers)
+UserRouter.get("/", AuthenticateToken, isAdmin(["admin"]), listUsers)
 UserRouter.post("/create-admin" , validateSchema(createUserValidation), createUser)
 UserRouter.post("/authenticate" , validateSchema(validateLoginSchema), loginAdmin)
-UserRouter.get("/logout", isAuthenticated, logoutUser)
-UserRouter.get(`/me/:userId`,isAuthenticated, getCurrentUser)
-UserRouter.delete(`/delete/:userId`, isAuthenticated,isAdmin(["super-admin"]), deleteAdmin)
+UserRouter.post("/refresh-token" , refreshToken)
+UserRouter.get("/logout", AuthenticateToken, logoutUser)
+UserRouter.get(`/me/:userId`,AuthenticateToken, getCurrentUser)
+UserRouter.patch(`/update-Admin/:userId`,AuthenticateToken, updateAdmin)
+UserRouter.delete(`/delete/:userId`, AuthenticateToken,isAdmin(["super-admin"]), deleteAdmin)
 
 
 export default UserRouter
